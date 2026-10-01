@@ -11,9 +11,10 @@
  *                                                         règles sur un record déjà écrit)
  *   - POST /records/action                               (back — déclenche une action métier)
  *
- * Aucune authentification n'existe côté serveur à ce jour (CORS ouvert, pas de clé) —
- * voir deploy-vivalink/PLAN-AUTH.md. Ce serveur MCP n'ajoute donc aucune barrière de
- * plus que ce qui est déjà exposé publiquement ; il structure juste l'accès pour Claude.
+ * Instances protégées (axio) : ALTAIR_TOKEN (device_token d'un utilisateur de l'auth-service,
+ * super-utilisateur pour tout voir) est envoyé en Bearer ; la lecture passe alors par
+ * GET /api/data (filtré par droits) et l'écriture par POST /api/patch (champs modifiés
+ * seulement). Sans ALTAIR_TOKEN, comportement historique pour les instances sans connexion.
  *
  * Un seul métier par instance de ce serveur : la variable d'environnement ALTAIR_BASE_URL
  * fixe l'URL cible (ex. https://axio.vivalink.top). Pour piloter plusieurs métiers,
@@ -31,6 +32,11 @@ if (!BASE_URL) {
   process.exit(1);
 }
 const LABEL = process.env.ALTAIR_LABEL || new URL(BASE_URL).hostname;
+const TOKEN = process.env.ALTAIR_TOKEN;
+
+function authHeaders() {
+  return TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {};
+}
 
 // Publication Mercure directe (optionnelle) : /records/notify passe par RabbitMQ + un
 // worker asynchrone, ce qui peut être lent/silencieux si le worker est down, ou ne rien
@@ -70,7 +76,7 @@ async function publishMercure(typeId, id, extra = {}) {
 }
 
 async function getJson(path) {
-  const res = await fetch(new URL(path, BASE_URL));
+  const res = await fetch(new URL(path, BASE_URL), { headers: authHeaders() });
   if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
   return res.json();
 }
@@ -78,7 +84,7 @@ async function getJson(path) {
 async function postJson(path, body) {
   const res = await fetch(new URL(path, BASE_URL), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -103,11 +109,12 @@ async function loadSchema() {
 }
 
 async function loadData() {
-  return getJson('/assets/data.json');
+  return getJson(TOKEN ? '/api/data' : '/assets/data.json');
 }
 
-async function saveData(file, content) {
-  return postJson('/api/save', { file, content });
+// Instance protégée : seul le patch part (le serveur refuse l'écriture du fichier entier).
+async function persistData(data, patch) {
+  return TOKEN ? postJson('/api/patch', patch) : postJson('/api/save', { file: 'data.json', content: data });
 }
 
 async function notifyAndPublish(typeId, id, changedFields, extra = {}) {
@@ -222,7 +229,8 @@ server.registerTool(
     }
     records.push(record);
     data[typeId] = records;
-    await saveData('data.json', data);
+    const { id: _id, ...newFields } = record;
+    await persistData(data, { upserts: [{ typeId, id, fields: newFields }] });
     const warnings = await notifyAndPublish(typeId, id, Object.keys(fields));
     return textResult(warnings.length ? { record, warnings } : record);
   },
@@ -255,7 +263,7 @@ server.registerTool(
     const record = records.find((r) => r.id === id);
     if (!record) return errorResult(`Aucun enregistrement ${typeId}/${id}`);
     Object.assign(record, fields);
-    await saveData('data.json', data);
+    await persistData(data, { upserts: [{ typeId, id, fields }] });
     const warnings = await notifyAndPublish(typeId, id, Object.keys(fields));
     return textResult(warnings.length ? { record, warnings } : record);
   },
@@ -278,7 +286,7 @@ server.registerTool(
     if (index === -1) return errorResult(`Aucun enregistrement ${typeId}/${id}`);
     const [removed] = records.splice(index, 1);
     data[typeId] = records;
-    await saveData('data.json', data);
+    await persistData(data, { deletes: [{ typeId, id }] });
     // Pas de /records/notify ici : le back ne sait pas traiter un événement de
     // suppression (voir back/README.md, dette connue). La publication Mercure directe,
     // elle, fonctionne quand même pour que le front retire la fiche de l'affichage.

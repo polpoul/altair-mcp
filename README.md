@@ -32,6 +32,12 @@ claude mcp add <nom> -s user \
 
 - `ALTAIR_BASE_URL` (obligatoire) : URL de l'instance à piloter.
 - `ALTAIR_LABEL` (optionnel) : nom affiché dans les descriptions d'outils, défaut = nom d'hôte de l'URL.
+- `ALTAIR_TOKEN` (obligatoire pour une instance protégée, axio) : `device_token` d'un utilisateur de
+  l'auth-service, envoyé en `Authorization: Bearer`. Utiliser un jeton **dédié** (connexion depuis
+  un autre navigateur ou profil) pour pouvoir le révoquer sans fermer sa propre session ; le
+  compte doit être super-utilisateur (`acl-rules.json` de l'instance) pour tout voir, et les
+  objets créés lui appartiennent. Sans jeton, le serveur lit `/assets/data.json` et écrit via
+  `/api/save` comme avant (instances sans connexion : nexo, oria).
 - `ALTAIR_MERCURE_JWT_SECRET` (optionnel) : active la publication directe sur Mercure après
   chaque écriture, pour un rafraîchissement en direct côté front sans recharger la page
   (nécessaire notamment pour `delete_record`, le back n'ayant pas d'événement de suppression
@@ -40,6 +46,7 @@ claude mcp add <nom> -s user \
 
 ## Sécurité
 
-Ce serveur ne fait qu'appeler l'API déjà exposée par l'instance visée (`/api/save`,
-`/records/notify`, `/records/action`) — il n'ajoute ni ne retire aucune barrière de
-sécurité par rapport à ce qui est déjà accessible publiquement sur cette instance.
+Ce serveur ne fait qu'appeler l'API exposée par l'instance visée (`/api/data`, `/api/patch`,
+`/records/notify`, `/records/action`, ou `/api/save` sans connexion) avec les droits du jeton
+fourni : il n'ajoute ni ne retire aucune barrière. Le jeton est un secret : ne le commite pas,
+ne le colle pas dans une conversation.
