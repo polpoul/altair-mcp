@@ -318,5 +318,71 @@ server.registerTool(
   },
 );
 
+// Partage : uniquement sur une instance protégée (jeton). L'inscription d'un utilisateur reste
+// une opération d'administrateur (server/add-user.js), volontairement hors de ce serveur.
+if (TOKEN) {
+  async function findUserId(user) {
+    const wanted = user.trim().toLowerCase();
+    const users = await getJson('/api/users');
+    return users.find((u) => u.id === user.trim() || (u.email ?? '').toLowerCase() === wanted)?.id ?? null;
+  }
+
+  server.registerTool(
+    'list_users',
+    {
+      title: 'Lister les utilisateurs',
+      description: `Liste les utilisateurs inscrits sur ${LABEL} avec qui partager (id, nom, email), sans l'utilisateur du jeton. À appeler pour retrouver l'id ou l'email à passer à share_record / unshare_record.`,
+      inputSchema: {},
+    },
+    async () => textResult(await getJson('/api/users')),
+  );
+
+  server.registerTool(
+    'list_owners',
+    {
+      title: 'Voir qui a accès à un enregistrement',
+      description: `Liste les utilisateurs qui ont accès à un enregistrement de ${LABEL} : propriétaires directs, et accès hérités d'un objet parent (ex. le projet d'une tâche, marqué inherited: true).`,
+      inputSchema: { id: z.string().describe("Id de l'enregistrement") },
+    },
+    async ({ id }) => {
+      const result = await postJson('/api/owners', { id });
+      return textResult(result.owners);
+    },
+  );
+
+  server.registerTool(
+    'share_record',
+    {
+      title: 'Partager des enregistrements',
+      description: `Donne accès à des enregistrements de ${LABEL} à un autre utilisateur (un seul niveau de droit : il pourra les modifier, les partager et les supprimer). Partager un projet partage aussi ses tâches, notes et interactions. L'utilisateur est désigné par son id ou son email (voir list_users) et doit déjà être inscrit.`,
+      inputSchema: {
+        ids: z.array(z.string()).min(1).describe('Ids des enregistrements à partager'),
+        user: z.string().describe("Id ou email du destinataire"),
+      },
+    },
+    async ({ ids, user }) => {
+      const userId = await findUserId(user);
+      if (!userId) return errorResult(`Utilisateur inconnu : ${user} (voir list_users)`);
+      return textResult(await postJson('/api/share', { ids, userId }));
+    },
+  );
+
+  server.registerTool(
+    'unshare_record',
+    {
+      title: "Retirer l'accès à des enregistrements",
+      description: `Retire un utilisateur des propriétaires directs d'enregistrements de ${LABEL}. Refusé si un enregistrement se retrouverait sans aucun propriétaire. stillAccess liste les enregistrements que l'utilisateur voit encore (accès hérité d'un projet : à retirer sur le projet lui-même). L'utilisateur est désigné par son id ou son email.`,
+      inputSchema: {
+        ids: z.array(z.string()).min(1).describe('Ids des enregistrements'),
+        user: z.string().describe("Id ou email de l'utilisateur à retirer"),
+      },
+    },
+    async ({ ids, user }) => {
+      const userId = (await findUserId(user)) ?? user.trim();
+      return textResult(await postJson('/api/unshare', { ids, userId }));
+    },
+  );
+}
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
