@@ -25,6 +25,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createHmac } from 'node:crypto';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 
 const BASE_URL = process.env.ALTAIR_BASE_URL;
 if (!BASE_URL) {
@@ -217,6 +220,9 @@ server.registerTool(
     if (!type) return errorResult(`Type inconnu : ${typeId}`);
     const pathKeys = Object.keys(fields).filter((k) => k.includes('.'));
     if (pathKeys.length) return errorResult(`Champs en lecture seule (chemin), à ne pas fournir : ${pathKeys.join(', ')}`);
+    const fileKeys = type.fields.filter((f) => f.type === 'file').map((f) => f.key);
+    const written = Object.keys(fields).filter((k) => fileKeys.includes(k));
+    if (written.length) return errorResult(`Champs de type file : utiliser attach_file / remove_file (${written.join(', ')})`);
 
     const data = await loadData();
     const records = data[typeId] || [];
@@ -257,6 +263,9 @@ server.registerTool(
     for (const key of Object.keys(fields)) {
       if (!flatKeys.includes(key)) return errorResult(`Champ inconnu sur ${typeId} : ${key}`);
     }
+    const fileKeys = type.fields.filter((f) => f.type === 'file').map((f) => f.key);
+    const written = Object.keys(fields).filter((k) => fileKeys.includes(k));
+    if (written.length) return errorResult(`Champs de type file : utiliser attach_file / remove_file (${written.join(', ')})`);
 
     const data = await loadData();
     const records = data[typeId] || [];
@@ -380,6 +389,171 @@ if (TOKEN) {
     async ({ ids, user }) => {
       const userId = (await findUserId(user)) ?? user.trim();
       return textResult(await postJson('/api/unshare', { ids, userId }));
+    },
+  );
+}
+
+// Documents joints : uniquement sur une instance protégée (le serveur ne les expose qu'avec un jeton).
+// Les droits sont ceux de l'objet porteur ; le serveur reste seul juge du type de fichier (extension +
+// signature) et de la taille (10 Mo).
+if (TOKEN) {
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+  async function fileField(typeId, field) {
+    const type = findType(await loadSchema(), typeId);
+    if (!type) return { error: `Type inconnu : ${typeId}` };
+    const def = type.fields.find((f) => f.key === field);
+    if (!def) return { error: `Champ inconnu sur ${typeId} : ${field}` };
+    if (def.type !== 'file') return { error: `${typeId}.${field} n'est pas un champ de type file (voir list_types)` };
+    return { def };
+  }
+
+  async function readMeta(typeId, id, field) {
+    const record = ((await loadData())[typeId] || []).find((r) => r.id === id);
+    if (!record) return { error: `Aucun enregistrement ${typeId}/${id}` };
+    try {
+      const meta = JSON.parse(record[field] || 'null');
+      return meta && meta.id ? { meta } : { error: `Aucun fichier joint dans ${typeId}/${id}.${field}` };
+    } catch {
+      return { error: `Aucun fichier joint dans ${typeId}/${id}.${field}` };
+    }
+  }
+
+  async function failure(res) {
+    const text = await res.text();
+    let message = text;
+    try {
+      message = JSON.parse(text).error ?? text;
+    } catch {
+      // Texte brut : on le garde tel quel.
+    }
+    return `${res.status} ${message}`;
+  }
+
+  const target = (typeId, id, field) => new URLSearchParams({ typeId, id, field });
+
+  server.registerTool(
+    'get_file_info',
+    {
+      title: "Lire le document joint d'un champ",
+      description: `Retourne les métadonnées (nom, type, taille, date, auteur) du document joint d'un champ de type file d'un enregistrement de ${LABEL}. Le champ vaut null s'il n'y a pas de fichier.`,
+      inputSchema: { typeId: z.string(), id: z.string(), field: z.string().describe('Clé du champ de type file (voir list_types)') },
+    },
+    async ({ typeId, id, field }) => {
+      const check = await fileField(typeId, field);
+      if (check.error) return errorResult(check.error);
+      const record = ((await loadData())[typeId] || []).find((r) => r.id === id);
+      if (!record) return errorResult(`Aucun enregistrement ${typeId}/${id}`);
+      const found = await readMeta(typeId, id, field);
+      return textResult({ typeId, id, field, fichier: found.meta ?? null });
+    },
+  );
+
+  server.registerTool(
+    'attach_file',
+    {
+      title: 'Joindre un document',
+      description: `Envoie un fichier local vers le champ de type file d'un enregistrement de ${LABEL} (un seul fichier par champ : il remplace l'éventuel précédent). 10 Mo maximum ; types acceptés : pdf, png, jpg, jpeg, gif, webp, xls, xlsx, doc, docx, zip, csv, txt.`,
+      inputSchema: {
+        typeId: z.string(),
+        id: z.string(),
+        field: z.string().describe('Clé du champ de type file (voir list_types)'),
+        path: z.string().describe('Chemin du fichier sur cette machine'),
+      },
+    },
+    async ({ typeId, id, field, path }) => {
+      const check = await fileField(typeId, field);
+      if (check.error) return errorResult(check.error);
+      let info;
+      try {
+        info = await stat(path);
+      } catch {
+        return errorResult(`Fichier introuvable : ${path}`);
+      }
+      if (!info.isFile()) return errorResult(`${path} n'est pas un fichier`);
+      if (info.size === 0) return errorResult('Fichier vide');
+      if (info.size > MAX_FILE_BYTES) return errorResult('Fichier trop volumineux (10 Mo maximum)');
+
+      const query = target(typeId, id, field);
+      query.set('name', basename(path));
+      const res = await fetch(new URL(`/api/attachments?${query}`, BASE_URL), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream', ...authHeaders() },
+        body: await readFile(path),
+      });
+      if (!res.ok) return errorResult(await failure(res));
+      const { fichier } = await res.json();
+      // Le serveur a déjà écrit le champ ; on prévient seulement les fiches ouvertes.
+      const warnings = [];
+      try {
+        await publishMercure(typeId, id, { changedFields: [field] });
+      } catch (e) {
+        warnings.push(`publication Mercure échouée : ${e.message}`);
+      }
+      return textResult(warnings.length ? { fichier, warnings } : { fichier });
+    },
+  );
+
+  server.registerTool(
+    'download_file',
+    {
+      title: 'Télécharger un document joint',
+      description: `Enregistre sur cette machine le document joint d'un champ de type file d'un enregistrement de ${LABEL}. Retourne le chemin du fichier créé (jamais écrasé : un suffixe est ajouté si le nom existe).`,
+      inputSchema: {
+        typeId: z.string(),
+        id: z.string(),
+        field: z.string(),
+        directory: z.string().optional().describe('Dossier de destination (par défaut : dossier temporaire du système)'),
+      },
+    },
+    async ({ typeId, id, field, directory }) => {
+      const check = await fileField(typeId, field);
+      if (check.error) return errorResult(check.error);
+      const found = await readMeta(typeId, id, field);
+      if (found.error) return errorResult(found.error);
+
+      const res = await fetch(new URL(`/api/attachments/${found.meta.id}`, BASE_URL), { headers: authHeaders() });
+      if (!res.ok) return errorResult(await failure(res));
+      const folder = directory || join(tmpdir(), 'altair-mcp');
+      await mkdir(folder, { recursive: true });
+
+      const name = basename(found.meta.nom);
+      const dot = name.lastIndexOf('.');
+      const stem = dot > 0 ? name.slice(0, dot) : name;
+      const ext = dot > 0 ? name.slice(dot) : '';
+      const bytes = Buffer.from(await res.arrayBuffer());
+      for (let n = 0; n < 1000; n += 1) {
+        const destination = join(folder, n === 0 ? name : `${stem} (${n})${ext}`);
+        try {
+          await writeFile(destination, bytes, { flag: 'wx' });
+          return textResult({ path: destination, fichier: found.meta });
+        } catch (e) {
+          if (e.code !== 'EEXIST') return errorResult(`Écriture impossible : ${e.message}`);
+        }
+      }
+      return errorResult('Trop de fichiers du même nom dans le dossier de destination');
+    },
+  );
+
+  server.registerTool(
+    'remove_file',
+    {
+      title: 'Retirer un document joint',
+      description: `Supprime le document joint d'un champ de type file d'un enregistrement de ${LABEL} (le contenu est supprimé du serveur et le champ vidé).`,
+      inputSchema: { typeId: z.string(), id: z.string(), field: z.string() },
+    },
+    async ({ typeId, id, field }) => {
+      const check = await fileField(typeId, field);
+      if (check.error) return errorResult(check.error);
+      const res = await fetch(new URL(`/api/attachments?${target(typeId, id, field)}`, BASE_URL), { method: 'DELETE', headers: authHeaders() });
+      if (!res.ok) return errorResult(await failure(res));
+      const warnings = [];
+      try {
+        await publishMercure(typeId, id, { changedFields: [field] });
+      } catch (e) {
+        warnings.push(`publication Mercure échouée : ${e.message}`);
+      }
+      return textResult(warnings.length ? { ok: true, warnings } : { ok: true });
     },
   );
 }

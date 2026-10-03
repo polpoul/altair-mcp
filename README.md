@@ -105,6 +105,16 @@ Avec `ALTAIR_TOKEN`, quatre outils de partage s'ajoutent :
 | `share_record` | Donne accès à des enregistrements à un utilisateur déjà inscrit | `ids`, `user` (id ou email) |
 | `unshare_record` | Retire un utilisateur des propriétaires directs | `ids`, `user` (id ou email) |
 
+Avec `ALTAIR_TOKEN`, quatre outils gèrent aussi les **documents joints** (champs de type `file`, voir
+`list_types`) :
+
+| Outil | Rôle | Paramètres |
+|---|---|---|
+| `get_file_info` | Métadonnées du document d'un champ (nom, type, taille, date, auteur), `null` s'il n'y en a pas | `typeId`, `id`, `field` |
+| `attach_file` | Envoie un fichier local dans le champ (remplace le précédent) | `typeId`, `id`, `field`, `path` |
+| `download_file` | Enregistre le document sur cette machine, sans jamais écraser un fichier existant | `typeId`, `id`, `field`, `directory?` |
+| `remove_file` | Supprime le document (contenu et champ) | `typeId`, `id`, `field` |
+
 Comportements à connaître :
 
 - **Règles métier.** Après une création ou une modification, le MCP notifie le back
@@ -116,6 +126,11 @@ Comportements à connaître :
 - **Écriture.** Sur une instance protégée, seuls les champs modifiés sont envoyés
   (`/api/patch`) : les autres champs et les objets invisibles pour le compte ne sont jamais écrasés.
   Le lot est refusé en entier si un seul objet est interdit.
+- **Documents joints.** Un fichier par champ, 10 Mo maximum ; types acceptés : pdf, png, jpg, jpeg, gif,
+  webp, xls, xlsx, doc, docx, zip, csv, txt (le serveur vérifie l'extension ET le contenu). Les droits sont
+  ceux de l'objet porteur. `create_record` et `update_record` refusent d'écrire un champ de type `file` :
+  passer par `attach_file` / `remove_file`. Le chemin de `attach_file` est lu sur la machine qui lance le
+  MCP.
 - **Inscription d'un utilisateur.** Volontairement absente du MCP : c'est une opération
   d'administrateur (`server/add-user.js`, dépôt `altair-ux-maquette`).
 
@@ -168,11 +183,12 @@ Le modèle, appliqué par le serveur de l'instance (`altair-ux-maquette`, dossie
 
 ## Tests
 
-Deux scripts de vérification, qui ciblent l'instance **réelle** (`https://axio.vivalink.top`) et lisent
+Trois scripts de vérification, qui ciblent l'instance **réelle** (`https://axio.vivalink.top`) et lisent
 `ALTAIR_TOKEN` dans l'environnement :
 
 ```bash
 set ALTAIR_TOKEN=<jeton>      # Windows cmd ; export ALTAIR_TOKEN=... sous bash
 node smoke-test.mjs           # lecture seule : types et enregistrements
 node smoke-test-write.mjs     # écriture : crée, modifie puis supprime un contact « MCP-smoketest »
+node smoke-test-files.mjs     # documents joints : crée une note « MCP-smoketest », y joint un fichier, le relit, le télécharge, le retire, supprime la note
 ```
