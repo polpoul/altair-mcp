@@ -107,8 +107,10 @@ function errorResult(message) {
   return { content: [{ type: 'text', text: `Erreur : ${message}` }], isError: true };
 }
 
+// Instance protégée : le schéma vit dans le volume de données (source unique, modifiable par update_schema) ;
+// sinon fichier statique comme avant.
 async function loadSchema() {
-  return getJson('/assets/schema.json');
+  return getJson(TOKEN ? '/api/files/schema.json' : '/assets/schema.json');
 }
 
 async function loadData() {
@@ -555,6 +557,82 @@ if (TOKEN) {
       }
       return textResult(warnings.length ? { ok: true, warnings } : { ok: true });
     },
+  );
+}
+
+// Schéma : lu par l'API (source unique dans le volume de données) et modifié par opérations structurées,
+// validées par le serveur (super-utilisateurs seulement, sauvegarde avant chaque écriture). Le front prend le
+// nouveau schéma au rechargement de la page ; le back PHP le relit tout seul.
+if (TOKEN) {
+  const fieldSpec = z
+    .object({
+      key: z.string().describe('Clé du champ : lettres, chiffres et _, commence par une lettre (non modifiable ensuite)'),
+      label: z.string(),
+      type: z.enum(['text', 'textarea', 'checkbox', 'date', 'datetime', 'time', 'number', 'picklist', 'file']).optional().describe('Absent = texte'),
+      options: z.array(z.string()).optional().describe('Valeurs d\'un champ picklist (obligatoire pour picklist)'),
+      optionColors: z.record(z.string()).optional(),
+      category: z.string().describe('Id d\'une catégorie existante du type'),
+      order: z.number().optional().describe('Ordre dans la catégorie (par défaut : à la fin)'),
+      displayMode: z.enum(['aucun', 'tous', 'complet', 'resume']).optional().describe('Par défaut : complet'),
+    })
+    .strict();
+
+  const fieldPatch = z
+    .object({
+      label: z.string().optional(),
+      type: z.enum(['text', 'textarea', 'checkbox', 'date', 'datetime', 'time', 'number', 'picklist', 'file']).nullable().optional().describe('null = retirer (texte)'),
+      options: z.array(z.string()).nullable().optional(),
+      optionColors: z.record(z.string()).nullable().optional(),
+      category: z.string().optional(),
+      order: z.number().optional(),
+      displayMode: z.enum(['aucun', 'tous', 'complet', 'resume']).optional(),
+    })
+    .strict();
+
+  const change = z.discriminatedUnion('op', [
+    z.object({ op: z.literal('addField'), typeId: z.string(), field: fieldSpec }),
+    z.object({ op: z.literal('updateField'), typeId: z.string(), key: z.string(), patch: fieldPatch }),
+    z.object({ op: z.literal('removeField'), typeId: z.string(), key: z.string() }),
+    z.object({
+      op: z.literal('addCategory'),
+      typeId: z.string(),
+      category: z.object({ id: z.string(), label: z.string(), order: z.number().optional() }).strict(),
+    }),
+    z.object({
+      op: z.literal('updateCategory'),
+      typeId: z.string(),
+      id: z.string(),
+      patch: z.object({ label: z.string().optional(), order: z.number().optional() }).strict(),
+    }),
+    z.object({ op: z.literal('removeCategory'), typeId: z.string(), id: z.string() }),
+  ]);
+
+  server.registerTool(
+    'get_schema',
+    {
+      title: 'Lire le schéma de données',
+      description: `Retourne le schéma complet de ${LABEL} (types, champs avec leurs propriétés, catégories, relations, actions), ou d'un seul type avec typeId. Plus détaillé que list_types : à lire avant update_schema.`,
+      inputSchema: { typeId: z.string().optional().describe('Limiter à un type') },
+    },
+    async ({ typeId }) => {
+      const schema = await loadSchema();
+      if (!typeId) return textResult(schema);
+      const type = findType(schema, typeId);
+      return type ? textResult(type) : errorResult(`Type inconnu : ${typeId}`);
+    },
+  );
+
+  server.registerTool(
+    'update_schema',
+    {
+      title: 'Modifier le schéma de données',
+      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory), tout ou rien. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais. Créer ou supprimer un type n'est pas possible ici.`,
+      inputSchema: {
+        changes: z.array(change).min(1).describe('Opérations appliquées dans l\'ordre'),
+        force: z.boolean().optional().describe('Autorise le retrait d\'un champ qui contient des données'),
+      },
+    },
+    async ({ changes, force }) => textResult(await postJson('/api/schema', { changes, force: force === true })),
   );
 }
 

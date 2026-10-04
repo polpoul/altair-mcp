@@ -115,8 +115,22 @@ Avec `ALTAIR_TOKEN`, quatre outils gèrent aussi les **documents joints** (champ
 | `download_file` | Enregistre le document sur cette machine, sans jamais écraser un fichier existant | `typeId`, `id`, `field`, `directory?` |
 | `remove_file` | Supprime le document (contenu et champ) | `typeId`, `id`, `field` |
 
+Avec `ALTAIR_TOKEN`, deux outils lisent et modifient le **schéma de données** :
+
+| Outil | Rôle | Paramètres |
+|---|---|---|
+| `get_schema` | Schéma complet, ou d'un type (champs, catégories, relations, actions) | `typeId?` |
+| `update_schema` | Opérations structurées sur le schéma, tout ou rien (super-utilisateurs) | `changes`, `force?` |
+
 Comportements à connaître :
 
+- **Schéma.** Source unique : `/data/axio/schema.json` sur le serveur. `update_schema` accepte `addField`,
+  `updateField`, `removeField`, `addCategory`, `updateCategory` et `removeCategory` ; le serveur valide le schéma
+  entier et en garde une copie (`schema-backups/`, les 30 dernières) avant d'écrire. Aucun redémarrage : recharger
+  la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données
+  exige `force: true` (les valeurs restent dans `data.json`) ; un champ utilisé par un titre, une colonne par défaut,
+  l'agenda ou une relation ne se retire jamais. Créer ou supprimer un type n'est pas prévu. Restaurer une version :
+  `cp /data/axio/schema-backups/<fichier> /data/axio/schema.json` sur le serveur.
 - **Règles métier.** Après une création ou une modification, le MCP notifie le back
   (`/records/notify`) : les règles s'exécutent de façon asynchrone dans un worker. Leur effet (ex. un
   titre mis en majuscules, l'avancement d'un projet recalculé) n'apparaît pas dans la réponse de
