@@ -79,7 +79,21 @@ MCP, pour pouvoir le révoquer sans fermer sa propre session :
 Pour révoquer ce jeton plus tard : `POST https://auth.vivalink.top/auth/logout` avec cet `Authorization: Bearer`.
 
 Le compte du jeton doit être **super-utilisateur** de l'instance (`acl-rules.json`) pour que le MCP
-voie tout. Les objets créés par le MCP appartiennent à ce compte.
+voie tout. Par défaut, les objets créés par le MCP appartiennent à ce compte.
+
+#### Compte de service (recommandé)
+
+Plutôt que d'utiliser le compte d'une personne, ouvrir la session du MCP avec un compte **dédié** (son email
+dans l'allowlist de l'auth-service, app `axio`), puis le déclarer comme compte de service sur le serveur :
+
+```
+docker exec $(docker ps -qf name=axio-save-server) node server/add-service-account.js \
+  --dir /app/public/assets --id <user_id du compte du MCP> --owner <user_id de la personne>
+```
+
+Le compte devient super-utilisateur (une seule déclaration, pas besoin de l'ajouter à `superUsers`) et les
+objets qu'il crée appartiennent à `--owner`, qui les retrouve dans l'application. Il n'apparaît pas dans la
+liste des personnes avec qui partager. Retirer la déclaration : même commande avec `--id <user_id> --remove`.
 
 ## Outils
 
