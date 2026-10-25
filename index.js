@@ -607,6 +607,7 @@ if (TOKEN) {
       patch: z.object({ label: z.string().optional(), order: z.number().optional() }).strict(),
     }),
     z.object({ op: z.literal('removeCategory'), typeId: z.string(), id: z.string() }),
+    z.object({ op: z.literal('setTitleFields'), typeId: z.string(), fields: z.array(z.string()).min(1) }),
   ]);
 
   server.registerTool(
@@ -628,7 +629,7 @@ if (TOKEN) {
     'update_schema',
     {
       title: 'Modifier le schéma de données',
-      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory), tout ou rien. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais. Créer ou supprimer un type n'est pas possible ici.`,
+      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory, setTitleFields), tout ou rien. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais (pour un champ titre : setTitleFields { typeId, fields: [clés existantes, sans doublon] } change d'abord les champs du titre, puis removeField dans la même requête ou une suivante). Créer ou supprimer un type n'est pas possible ici.`,
       inputSchema: {
         changes: z.array(change).min(1).describe('Opérations appliquées dans l\'ordre'),
         force: z.boolean().optional().describe('Autorise le retrait d\'un champ qui contient des données'),
