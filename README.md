@@ -139,11 +139,14 @@ Avec `ALTAIR_TOKEN`, deux outils lisent et modifient le **schéma de données** 
 Comportements à connaître :
 
 - **Schéma.** Source unique : `/data/axio/schema.json` sur le serveur. `update_schema` accepte `addField`,
-  `updateField`, `removeField`, `addCategory`, `updateCategory` et `removeCategory` ; le serveur valide le schéma
+  `updateField`, `removeField`, `addCategory`, `updateCategory`, `removeCategory` et `setAgenda`
+  (`typeId`, `startField`, `endField` : champs `date`/`datetime` ; deux `null` retirent l'agenda ; un seul `null`
+  est refusé en 400, un champ inconnu en 404) ; le serveur valide le schéma
   entier et en garde une copie (`schema-backups/`, les 30 dernières) avant d'écrire. Aucun redémarrage : recharger
   la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données
-  exige `force: true` (les valeurs restent dans `data.json`) ; un champ utilisé par un titre, une colonne par défaut,
-  l'agenda ou une relation ne se retire jamais. Créer ou supprimer un type n'est pas prévu. Restaurer une version :
+  exige `force: true` (les valeurs restent dans `data.json`) ; un champ utilisé par un titre, une colonne par défaut
+  ou une relation ne se retire jamais, ni un champ de l'agenda tant que celui-ci existe (le retirer d'abord par
+  `setAgenda` avec deux `null`). Créer ou supprimer un type n'est pas prévu. Restaurer une version :
   `cp /data/axio/schema-backups/<fichier> /data/axio/schema.json` sur le serveur.
 - **Règles métier.** Après une création ou une modification, le MCP notifie le back
   (`/records/notify`) : les règles s'exécutent de façon asynchrone dans un worker. Leur effet (ex. un

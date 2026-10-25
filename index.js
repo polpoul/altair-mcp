@@ -607,6 +607,12 @@ if (TOKEN) {
       patch: z.object({ label: z.string().optional(), order: z.number().optional() }).strict(),
     }),
     z.object({ op: z.literal('removeCategory'), typeId: z.string(), id: z.string() }),
+    z.object({
+      op: z.literal('setAgenda'),
+      typeId: z.string(),
+      startField: z.string().nullable().describe('Clé du champ date/datetime de début ; null avec endField null = retirer l\'agenda'),
+      endField: z.string().nullable().describe('Clé du champ date/datetime de fin ; null avec startField null = retirer l\'agenda'),
+    }),
   ]);
 
   server.registerTool(
@@ -628,7 +634,7 @@ if (TOKEN) {
     'update_schema',
     {
       title: 'Modifier le schéma de données',
-      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory), tout ou rien. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais. Créer ou supprimer un type n'est pas possible ici.`,
+      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory, setAgenda), tout ou rien. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut ou une relation ne se retire jamais, ni un champ de l'agenda tant que celui-ci existe (le retirer d'abord par setAgenda avec startField et endField à null). setAgenda pose l'agenda d'un type avec deux champs date/datetime ; un seul champ à null est refusé. Créer ou supprimer un type n'est pas possible ici.`,
       inputSchema: {
         changes: z.array(change).min(1).describe('Opérations appliquées dans l\'ordre'),
         force: z.boolean().optional().describe('Autorise le retrait d\'un champ qui contient des données'),
