@@ -574,6 +574,7 @@ if (TOKEN) {
       category: z.string().describe('Id d\'une catégorie existante du type'),
       order: z.number().optional().describe('Ordre dans la catégorie (par défaut : à la fin)'),
       displayMode: z.enum(['aucun', 'tous', 'complet', 'resume']).optional().describe('Par défaut : complet'),
+      renderAs: z.enum(['ring']).optional().describe('Rendu graphique alternatif à la valeur texte — \'ring\' : anneau de complétion (pensé pour un pourcentage)'),
     })
     .strict();
 
@@ -586,6 +587,7 @@ if (TOKEN) {
       category: z.string().optional(),
       order: z.number().optional(),
       displayMode: z.enum(['aucun', 'tous', 'complet', 'resume']).optional(),
+      renderAs: z.enum(['ring']).nullable().optional().describe('null = retirer'),
     })
     .strict();
 
