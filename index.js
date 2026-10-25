@@ -607,6 +607,22 @@ if (TOKEN) {
       patch: z.object({ label: z.string().optional(), order: z.number().optional() }).strict(),
     }),
     z.object({ op: z.literal('removeCategory'), typeId: z.string(), id: z.string() }),
+    z
+      .object({
+        op: z.literal('addType'),
+        id: z.string().describe('Id du type : lettres et chiffres, commence par une lettre'),
+        label: z.string(),
+        icon: z.string().optional().describe('Icône Material (par défaut : description)'),
+        color: z.string().optional().describe('Couleur hexadécimale (par défaut : #4C78A8)'),
+        categories: z.array(z.object({ id: z.string(), label: z.string(), order: z.number().optional() }).strict()).optional().describe('Par défaut : une catégorie « general »'),
+        fields: z.array(fieldSpec).optional().describe('Champs initiaux ; leur catégorie doit figurer dans categories'),
+        titleFields: z.array(z.string()).optional().describe('Clés des champs qui forment le titre'),
+        listColumns: z.array(z.string()).optional().describe('Clés des colonnes par défaut de la liste'),
+      })
+      .strict(),
+    z.object({ op: z.literal('removeType'), id: z.string() }).strict(),
+    z.object({ op: z.literal('addRelation'), from: z.string(), to: z.string(), via: z.string().describe('Clé du champ de lien, porté par le type cible'), label: z.string() }).strict(),
+    z.object({ op: z.literal('removeRelation'), from: z.string(), to: z.string(), via: z.string() }).strict(),
   ]);
 
   server.registerTool(
@@ -628,10 +644,10 @@ if (TOKEN) {
     'update_schema',
     {
       title: 'Modifier le schéma de données',
-      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory), tout ou rien. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais. Créer ou supprimer un type n'est pas possible ici.`,
+      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory, addType, removeType, addRelation, removeRelation), tout ou rien. addType crée un type (id, label, icône, couleur, catégories, champs, titleFields, listColumns) et addRelation déclare un lien (from, to, via, label) ; removeType est refusé si le type est source ou cible d'une relation, ou s'il contient des fiches sans force: true. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais. Le serveur doit être à jour : sinon les opérations de type et de relation échouent avec « Opération inconnue ».`,
       inputSchema: {
         changes: z.array(change).min(1).describe('Opérations appliquées dans l\'ordre'),
-        force: z.boolean().optional().describe('Autorise le retrait d\'un champ qui contient des données'),
+        force: z.boolean().optional().describe('Autorise le retrait d\'un champ, ou la suppression d\'un type, qui contient des données'),
       },
     },
     async ({ changes, force }) => textResult(await postJson('/api/schema', { changes, force: force === true })),
