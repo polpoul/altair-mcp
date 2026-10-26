@@ -143,12 +143,13 @@ Comportements à connaître :
   couleur d'un type ; jamais son `id`), `setTitleFields` (`{ op, typeId, fields: [clés] }` : change les champs qui
   forment le titre d'un type ; liste non vide, clés existantes, sans doublon), `setListColumns` (remplace les
   colonnes par défaut des listes d'un type : clés de champs ou chemins `viaKey.champCible` d'une relation entrante,
-  sans doublon ; permet ensuite de retirer un ancien champ colonne), `addType`, `removeType`,
+  sans doublon ; permet ensuite de retirer un ancien champ colonne), `setAgenda` (`typeId`, `startField`, `endField` : champs `date`/`datetime` ; deux `null` retirent l'agenda ;
+  un seul `null` est refusé en 400, un champ inconnu en 404), `addType`, `removeType`,
   `addRelation` et `removeRelation` ; le serveur valide le schéma
   entier et en garde une copie (`schema-backups/`, les 30 dernières) avant d'écrire. Aucun redémarrage : recharger
   la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données
   exige `force: true` (les valeurs restent dans `data.json`) ; un champ utilisé par un titre, une colonne par défaut,
-  l'agenda ou une relation ne se retire jamais (pour un champ titre, passer d'abord par `setTitleFields`). Restaurer une version :
+  l'agenda ou une relation ne se retire jamais (pour un champ titre, passer d'abord par `setTitleFields` ; pour un champ de l'agenda, par `setAgenda` avec deux `null`). Restaurer une version :
   `cp /data/axio/schema-backups/<fichier> /data/axio/schema.json` sur le serveur.
 - **Types et relations.** `addType` (`id` et `label` requis ; `icon`, `color`, `categories`, `fields`,
   `titleFields`, `listColumns` optionnels) crée un type ; son `id` suit `[A-Za-z][A-Za-z0-9]*`, ne peut pas être

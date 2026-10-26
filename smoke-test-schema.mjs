@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-// Validation zod de update_schema (addType, removeType, addRelation, removeRelation), sans réseau ni jeton réel :
+// Validation zod de update_schema (toutes les opérations de schéma), sans réseau ni jeton réel :
 // le port 9 est fermé, donc une opération valide échoue en « fetch failed », une invalide en « Input validation error ».
 const transport = new StdioClientTransport({
   command: process.execPath,
@@ -33,27 +33,54 @@ check('update_schema présent', !!tool);
 
 const variants = tool.inputSchema.properties.changes.items.anyOf;
 const ops = variants.map((v) => v.properties.op.const);
-const expected = ['addField', 'updateField', 'removeField', 'addCategory', 'updateCategory', 'removeCategory', 'addType', 'removeType', 'addRelation', 'removeRelation'];
-check('10 opérations dans l\'union', expected.every((o) => ops.includes(o)) && ops.length === 10, JSON.stringify(ops));
+const existing = ['addField', 'updateField', 'removeField', 'addCategory', 'updateCategory', 'removeCategory'];
+const added = ['updateType', 'setTitleFields', 'setListColumns', 'setAgenda', 'addType', 'removeType', 'addRelation', 'removeRelation'];
+check(`${existing.length + added.length} opérations dans l'union`, [...existing, ...added].every((o) => ops.includes(o)) && ops.length === existing.length + added.length, JSON.stringify(ops));
 
+const required = {
+  updateType: ['op', 'typeId', 'patch'],
+  setTitleFields: ['op', 'typeId', 'fields'],
+  setListColumns: ['op', 'typeId', 'columns'],
+  setAgenda: ['op', 'typeId', 'startField', 'endField'],
+  addType: ['op', 'id', 'label'],
+  removeType: ['op', 'id'],
+  addRelation: ['op', 'from', 'to', 'via', 'label'],
+  removeRelation: ['op', 'from', 'to', 'via'],
+};
+for (const [op, keys] of Object.entries(required)) {
+  const variant = variants.find((v) => v.properties.op.const === op);
+  check(`${op} : champs requis`, keys.every((k) => variant.required.includes(k)) && variant.required.length === keys.length, JSON.stringify(variant.required));
+}
 const addType = variants.find((v) => v.properties.op.const === 'addType');
-check('addType : champs requis', ['op', 'id', 'label'].every((k) => addType.required.includes(k)) && addType.required.length === 3, JSON.stringify(addType.required));
 check('addType : propriétés', ['icon', 'color', 'categories', 'fields', 'titleFields', 'listColumns'].every((k) => k in addType.properties));
+const updateType = variants.find((v) => v.properties.op.const === 'updateType');
+check('updateType : patch = label/icon/color', JSON.stringify(Object.keys(updateType.properties.patch.properties).sort()) === JSON.stringify(['color', 'icon', 'label']));
 
-check('description mentionne addType', tool.description.includes('addType'));
+for (const op of added) {
+  check(`description mentionne ${op}`, tool.description.includes(op));
+}
 check('ancienne restriction retirée', !tool.description.includes("Créer ou supprimer un type n'est pas possible"));
 
 const invalid = [
   ['opération inconnue (dropType)', [{ op: 'dropType', id: 'x' }]],
   ['addType sans label', [{ op: 'addType', id: 'acteur' }]],
   ['addType avec propriété inconnue', [{ op: 'addType', id: 'acteur', label: 'Acteur', inconnu: 1 }]],
+  ['updateType avec clé de patch inconnue', [{ op: 'updateType', typeId: 'tache', patch: { id: 'autre' } }]],
+  ['setTitleFields avec liste vide', [{ op: 'setTitleFields', typeId: 'tache', fields: [] }]],
+  ['setListColumns sans columns', [{ op: 'setListColumns', typeId: 'tache' }]],
+  ['setAgenda sans endField', [{ op: 'setAgenda', typeId: 'tache', startField: 'debut' }]],
 ];
 for (const [label, changes] of invalid) {
   const r = await run(changes);
-  check(label, r.isError && r.text.includes('Input validation error'), r.text);
+  check(`${label} : refusé`, r.isError && r.text.includes('Input validation error'), r.text);
 }
 
 const valid = [
+  ['updateType', { op: 'updateType', typeId: 'tache', patch: { label: 'Tâches', icon: 'task_alt', color: '#4C78A8' } }],
+  ['setTitleFields', { op: 'setTitleFields', typeId: 'tache', fields: ['titre'] }],
+  ['setListColumns', { op: 'setListColumns', typeId: 'tache', columns: ['statut', 'projetId.nom'] }],
+  ['setAgenda', { op: 'setAgenda', typeId: 'tache', startField: 'debut', endField: 'fin' }],
+  ['setAgenda (retrait)', { op: 'setAgenda', typeId: 'tache', startField: null, endField: null }],
   [
     'addType complet (acteur)',
     {

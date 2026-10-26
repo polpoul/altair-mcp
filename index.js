@@ -644,6 +644,12 @@ if (TOKEN) {
           .describe('Colonnes par défaut des listes, sans doublon : clés de champs du type ou chemins viaKey.champCible (relation entrante)'),
       })
       .strict(),
+    z.object({
+      op: z.literal('setAgenda'),
+      typeId: z.string(),
+      startField: z.string().nullable().describe('Clé du champ date/datetime de début ; null avec endField null = retirer l\'agenda'),
+      endField: z.string().nullable().describe('Clé du champ date/datetime de fin ; null avec startField null = retirer l\'agenda'),
+    }),
   ]);
 
   server.registerTool(
@@ -665,7 +671,7 @@ if (TOKEN) {
     'update_schema',
     {
       title: 'Modifier le schéma de données',
-      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory, updateType, setTitleFields, setListColumns, addType, removeType, addRelation, removeRelation), tout ou rien. setTitleFields { typeId, fields: [clés existantes, sans doublon] } change les champs du titre d'un type : à utiliser avant de retirer l'ancien champ titre (removeField, dans la même requête ou une suivante). setListColumns remplace les colonnes par défaut des listes d'un type (clés de champs ou chemins viaKey.champCible) : à utiliser avant de retirer un champ qui était colonne. updateType modifie le libellé, l'icône et la couleur d'un type (jamais son id). addType crée un type (id, label, icône, couleur, catégories, champs, titleFields, listColumns) et addRelation déclare un lien (from, to, via, label) ; removeType est refusé si le type est source ou cible d'une relation, ou s'il contient des fiches sans force: true. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais. Le serveur doit être à jour : sinon les opérations de type et de relation échouent avec « Opération inconnue ».`,
+      description: `Modifie le schéma de ${LABEL} par des opérations structurées (addField, updateField, removeField, addCategory, updateCategory, removeCategory, updateType, setTitleFields, setListColumns, setAgenda, addType, removeType, addRelation, removeRelation), tout ou rien. setTitleFields { typeId, fields: [clés existantes, sans doublon] } change les champs du titre d'un type : à utiliser avant de retirer l'ancien champ titre (removeField, dans la même requête ou une suivante). setAgenda { typeId, startField, endField } pose l'agenda d'un type (deux champs date ou datetime) ; deux null le retirent, un seul null est refusé. setListColumns remplace les colonnes par défaut des listes d'un type (clés de champs ou chemins viaKey.champCible) : à utiliser avant de retirer un champ qui était colonne. updateType modifie le libellé, l'icône et la couleur d'un type (jamais son id). addType crée un type (id, label, icône, couleur, catégories, champs, titleFields, listColumns) et addRelation déclare un lien (from, to, via, label) ; removeType est refusé si le type est source ou cible d'une relation, ou s'il contient des fiches sans force: true. Réservé aux super-utilisateurs ; le serveur valide le schéma entier et en garde une sauvegarde avant d'écrire. Aucun redémarrage : recharger la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données exige force: true (les données restent dans data.json) ; un champ utilisé par un titre, une colonne par défaut, l'agenda ou une relation ne se retire jamais. Le serveur doit être à jour : sinon les opérations de type et de relation échouent avec « Opération inconnue ».`,
       inputSchema: {
         changes: z.array(change).min(1).describe('Opérations appliquées dans l\'ordre'),
         force: z.boolean().optional().describe('Autorise le retrait d\'un champ, ou la suppression d\'un type, qui contient des données'),
