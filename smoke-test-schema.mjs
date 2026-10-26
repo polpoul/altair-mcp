@@ -56,6 +56,12 @@ check('addType : propriétés', ['icon', 'color', 'categories', 'fields', 'title
 const updateType = variants.find((v) => v.properties.op.const === 'updateType');
 check('updateType : patch = label/icon/color', JSON.stringify(Object.keys(updateType.properties.patch.properties).sort()) === JSON.stringify(['color', 'icon', 'label']));
 
+const addCategory = variants.find((v) => v.properties.op.const === 'addCategory');
+const updateCategory = variants.find((v) => v.properties.op.const === 'updateCategory');
+check('addCategory : category accepte bare', 'bare' in addCategory.properties.category.properties);
+check('updateCategory : patch accepte bare', 'bare' in updateCategory.properties.patch.properties);
+check('description mentionne bare', tool.description.includes('bare'));
+
 for (const op of added) {
   check(`description mentionne ${op}`, tool.description.includes(op));
 }
@@ -69,6 +75,10 @@ const invalid = [
   ['setTitleFields avec liste vide', [{ op: 'setTitleFields', typeId: 'tache', fields: [] }]],
   ['setListColumns sans columns', [{ op: 'setListColumns', typeId: 'tache' }]],
   ['setAgenda sans endField', [{ op: 'setAgenda', typeId: 'tache', startField: 'debut' }]],
+  ['updateCategory avec bare non booléen', [{ op: 'updateCategory', typeId: 'note', id: 'contenu', patch: { bare: 'oui' } }]],
+  ['updateCategory avec propriété de patch inconnue', [{ op: 'updateCategory', typeId: 'note', id: 'contenu', patch: { inconnu: true } }]],
+  ['addCategory avec bare non booléen', [{ op: 'addCategory', typeId: 'note', category: { id: 'bloc', label: 'Bloc', bare: 'oui' } }]],
+  ['addCategory avec bare null (retrait impossible à la création)', [{ op: 'addCategory', typeId: 'note', category: { id: 'bloc', label: 'Bloc', bare: null } }]],
 ];
 for (const [label, changes] of invalid) {
   const r = await run(changes);
@@ -81,6 +91,11 @@ const valid = [
   ['setListColumns', { op: 'setListColumns', typeId: 'tache', columns: ['statut', 'projetId.nom'] }],
   ['setAgenda', { op: 'setAgenda', typeId: 'tache', startField: 'debut', endField: 'fin' }],
   ['setAgenda (retrait)', { op: 'setAgenda', typeId: 'tache', startField: null, endField: null }],
+  ['updateCategory bare true', { op: 'updateCategory', typeId: 'note', id: 'contenu', patch: { bare: true } }],
+  ['updateCategory bare false', { op: 'updateCategory', typeId: 'note', id: 'contenu', patch: { bare: false } }],
+  ['updateCategory bare null (retrait)', { op: 'updateCategory', typeId: 'note', id: 'contenu', patch: { bare: null } }],
+  ['updateCategory bare avec label', { op: 'updateCategory', typeId: 'note', id: 'contenu', patch: { label: 'Contenu', bare: true } }],
+  ['addCategory bare true', { op: 'addCategory', typeId: 'note', category: { id: 'bloc', label: 'Bloc', bare: true } }],
   [
     'addType complet (acteur)',
     {

@@ -139,7 +139,9 @@ Avec `ALTAIR_TOKEN`, deux outils lisent et modifient le **schéma de données** 
 Comportements à connaître :
 
 - **Schéma.** Source unique : `/data/axio/schema.json` sur le serveur. `update_schema` accepte `addField`,
-  `updateField`, `removeField`, `addCategory`, `updateCategory`, `removeCategory`, `updateType` (libellé, icône,
+  `updateField`, `removeField`, `addCategory`, `updateCategory` (libellé, ordre et `bare` : `true` affiche la
+  catégorie en bloc « nu », sans en-tête ni pliage ; `null` retire la propriété, `addCategory` accepte aussi `bare`),
+  `removeCategory`, `updateType` (libellé, icône,
   couleur d'un type ; jamais son `id`), `setTitleFields` (`{ op, typeId, fields: [clés] }` : change les champs qui
   forment le titre d'un type ; liste non vide, clés existantes, sans doublon), `setListColumns` (remplace les
   colonnes par défaut des listes d'un type : clés de champs ou chemins `viaKey.champCible` d'une relation entrante,
