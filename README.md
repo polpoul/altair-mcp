@@ -139,12 +139,21 @@ Avec `ALTAIR_TOKEN`, deux outils lisent et modifient le **schéma de données** 
 Comportements à connaître :
 
 - **Schéma.** Source unique : `/data/axio/schema.json` sur le serveur. `update_schema` accepte `addField`,
-  `updateField`, `removeField`, `addCategory`, `updateCategory` et `removeCategory` ; le serveur valide le schéma
+  `updateField`, `removeField`, `addCategory`, `updateCategory`, `removeCategory`, `addType`, `removeType`,
+  `addRelation` et `removeRelation` ; le serveur valide le schéma
   entier et en garde une copie (`schema-backups/`, les 30 dernières) avant d'écrire. Aucun redémarrage : recharger
   la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données
   exige `force: true` (les valeurs restent dans `data.json`) ; un champ utilisé par un titre, une colonne par défaut,
-  l'agenda ou une relation ne se retire jamais. Créer ou supprimer un type n'est pas prévu. Restaurer une version :
+  l'agenda ou une relation ne se retire jamais. Restaurer une version :
   `cp /data/axio/schema-backups/<fichier> /data/axio/schema.json` sur le serveur.
+- **Types et relations.** `addType` (`id` et `label` requis ; `icon`, `color`, `categories`, `fields`,
+  `titleFields`, `listColumns` optionnels) crée un type ; son `id` suit `[A-Za-z][A-Za-z0-9]*`, ne peut pas être
+  réservé ni déjà pris, et les champs doivent viser une catégorie déclarée. `addRelation` (`from`, `to`, `via`,
+  `label`) exige des types existants, `via` étant un champ du type cible ; `removeRelation` prend `from`, `to`, `via`.
+  `removeType` est refusé si le type est source ou cible d'une relation (retirer d'abord la relation), ou s'il
+  contient des fiches sans `force: true`. Plusieurs opérations peuvent se suivre dans un même appel (ex. `addType`
+  puis deux `addRelation`), tout ou rien. Déployer le serveur avant le MCP : un serveur ancien répond
+  « Opération inconnue ».
 - **Règles métier.** Après une création ou une modification, le MCP notifie le back
   (`/records/notify`) : les règles s'exécutent de façon asynchrone dans un worker. Leur effet (ex. un
   titre mis en majuscules, l'avancement d'un projet recalculé) n'apparaît pas dans la réponse de

@@ -1,0 +1,85 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+// Validation zod de update_schema (addType, removeType, addRelation, removeRelation), sans réseau ni jeton réel :
+// le port 9 est fermé, donc une opération valide échoue en « fetch failed », une invalide en « Input validation error ».
+const transport = new StdioClientTransport({
+  command: process.execPath,
+  args: ['index.js'],
+  env: { ...process.env, ALTAIR_TOKEN: 'test', ALTAIR_BASE_URL: 'http://127.0.0.1:9', ALTAIR_LABEL: 'test' },
+});
+const client = new Client({ name: 'smoke-test-schema', version: '1.0.0' });
+await client.connect(transport);
+
+const check = (label, ok, detail = '') => {
+  if (!ok) {
+    console.error(`ÉCHEC : ${label} ${detail}`);
+    process.exit(1);
+  }
+  console.log(`OK : ${label}`);
+};
+const run = async (changes) => {
+  try {
+    const res = await client.callTool({ name: 'update_schema', arguments: { changes } });
+    return { isError: res.isError === true, text: res.content?.[0]?.text ?? '' };
+  } catch (e) {
+    return { isError: true, text: e.message };
+  }
+};
+
+const { tools } = await client.listTools();
+const tool = tools.find((t) => t.name === 'update_schema');
+check('update_schema présent', !!tool);
+
+const variants = tool.inputSchema.properties.changes.items.anyOf;
+const ops = variants.map((v) => v.properties.op.const);
+const expected = ['addField', 'updateField', 'removeField', 'addCategory', 'updateCategory', 'removeCategory', 'addType', 'removeType', 'addRelation', 'removeRelation'];
+check('10 opérations dans l\'union', expected.every((o) => ops.includes(o)) && ops.length === 10, JSON.stringify(ops));
+
+const addType = variants.find((v) => v.properties.op.const === 'addType');
+check('addType : champs requis', ['op', 'id', 'label'].every((k) => addType.required.includes(k)) && addType.required.length === 3, JSON.stringify(addType.required));
+check('addType : propriétés', ['icon', 'color', 'categories', 'fields', 'titleFields', 'listColumns'].every((k) => k in addType.properties));
+
+check('description mentionne addType', tool.description.includes('addType'));
+check('ancienne restriction retirée', !tool.description.includes("Créer ou supprimer un type n'est pas possible"));
+
+const invalid = [
+  ['opération inconnue (dropType)', [{ op: 'dropType', id: 'x' }]],
+  ['addType sans label', [{ op: 'addType', id: 'acteur' }]],
+  ['addType avec propriété inconnue', [{ op: 'addType', id: 'acteur', label: 'Acteur', inconnu: 1 }]],
+];
+for (const [label, changes] of invalid) {
+  const r = await run(changes);
+  check(label, r.isError && r.text.includes('Input validation error'), r.text);
+}
+
+const valid = [
+  [
+    'addType complet (acteur)',
+    {
+      op: 'addType',
+      id: 'acteur',
+      label: 'Acteur',
+      icon: 'person',
+      color: '#4C78A8',
+      categories: [{ id: 'general', label: 'Général', order: 0 }],
+      fields: [
+        { key: 'nom', label: 'Nom', category: 'general' },
+        { key: 'clientId', label: 'Contact', category: 'general' },
+        { key: 'tacheId', label: 'Tâche', category: 'general' },
+      ],
+      titleFields: ['nom'],
+      listColumns: ['nom', 'clientId', 'tacheId'],
+    },
+  ],
+  ['removeType', { op: 'removeType', id: 'acteur' }],
+  ['addRelation', { op: 'addRelation', from: 'tache', to: 'acteur', via: 'tacheId', label: 'Acteurs' }],
+  ['removeRelation', { op: 'removeRelation', from: 'tache', to: 'acteur', via: 'tacheId' }],
+];
+for (const [label, change] of valid) {
+  const r = await run([change]);
+  check(`${label} passe la validation`, r.isError && !r.text.includes('Input validation error') && r.text.includes('fetch failed'), r.text);
+}
+
+await client.close();
+process.exit(0);
