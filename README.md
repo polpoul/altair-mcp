@@ -140,11 +140,13 @@ Comportements à connaître :
 
 - **Schéma.** Source unique : `/data/axio/schema.json` sur le serveur. `update_schema` accepte `addField`,
   `updateField`, `removeField`, `addCategory`, `updateCategory`, `removeCategory`, `updateType` (libellé, icône,
-  couleur d'un type ; jamais son `id`), `addType`, `removeType`, `addRelation` et `removeRelation` ; le serveur valide le schéma
+  couleur d'un type ; jamais son `id`), `setTitleFields` (`{ op, typeId, fields: [clés] }` : change les champs qui
+  forment le titre d'un type ; liste non vide, clés existantes, sans doublon), `addType`, `removeType`,
+  `addRelation` et `removeRelation` ; le serveur valide le schéma
   entier et en garde une copie (`schema-backups/`, les 30 dernières) avant d'écrire. Aucun redémarrage : recharger
   la page pour voir le changement. Une clé de champ ne se renomme pas ; retirer un champ qui contient des données
   exige `force: true` (les valeurs restent dans `data.json`) ; un champ utilisé par un titre, une colonne par défaut,
-  l'agenda ou une relation ne se retire jamais. Restaurer une version :
+  l'agenda ou une relation ne se retire jamais (pour un champ titre, passer d'abord par `setTitleFields`). Restaurer une version :
   `cp /data/axio/schema-backups/<fichier> /data/axio/schema.json` sur le serveur.
 - **Types et relations.** `addType` (`id` et `label` requis ; `icon`, `color`, `categories`, `fields`,
   `titleFields`, `listColumns` optionnels) crée un type ; son `id` suit `[A-Za-z][A-Za-z0-9]*`, ne peut pas être
