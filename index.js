@@ -683,7 +683,7 @@ if (TOKEN) {
                   .object({
                     key: z.string(),
                     label: z.string(),
-                    type: z.enum(['number', 'text', 'relation', 'datetime']).describe('datetime : sélecteur date et heure, valeur au format AAAA-MM-JJTHH:mm'),
+                    type: z.enum(['number', 'text', 'relation', 'datetime', 'checkbox']).describe('datetime : sélecteur date et heure, valeur au format AAAA-MM-JJTHH:mm ; checkbox : case à cocher, vide par défaut, valeur "true" si cochée'),
                     required: z.boolean().optional().describe('true : Valider reste grisé tant que ce paramètre est vide'),
                     default: z.string().optional(),
                     targetType: z.string().optional().describe('Obligatoire et utilisé uniquement pour type: relation'),
