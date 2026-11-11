@@ -575,6 +575,7 @@ if (TOKEN) {
       order: z.number().optional().describe('Ordre dans la catégorie (par défaut : à la fin)'),
       displayMode: z.enum(['aucun', 'tous', 'complet', 'resume']).optional().describe('Par défaut : complet'),
       renderAs: z.enum(['ring']).optional().describe('Rendu graphique alternatif à la valeur texte — \'ring\' : anneau de complétion (pensé pour un pourcentage)'),
+      openRecordTypeField: z.string().optional().describe('Clé d\'un autre champ du type qui donne le type de la fiche visée par ce champ (id) : la carte ajoute un bouton « Ajouter cette fiche sur le canevas ». Ex. cibleId + cibleTypeId'),
     })
     .strict();
 
@@ -588,6 +589,7 @@ if (TOKEN) {
       order: z.number().optional(),
       displayMode: z.enum(['aucun', 'tous', 'complet', 'resume']).optional(),
       renderAs: z.enum(['ring']).nullable().optional().describe('null = retirer'),
+      openRecordTypeField: z.string().nullable().optional().describe('Clé de l\'autre champ du type qui donne le type de la fiche visée ; null = retirer'),
     })
     .strict();
 
